@@ -1,33 +1,38 @@
 #!/bin/bash
 
-# --- Arch-AI-Hardener Dasar ---
-# Author: Suditro Pratama (feelinglost31-jpg)
+echo "--- [ Arch-AI-Hardener: Smart Audit ] ---"
+score=0
 
-echo "[+] Memulai Proses Hardening Sistem..."
-
-# 1. Cek Permission File Sensitif
-echo "[!] Mengetatkan izin akses file sensitif (/etc/shadow, /etc/passwd)..."
-sudo chmod 600 /etc/shadow
-sudo chmod 644 /etc/passwd
-sudo chmod 600 /etc/gshadow
-sudo chmod 644 /etc/group
-
-# 2. Pengaturan Firewall (Menggunakan UFW agar simpel dan cepat)
-echo "[!] Mengatur Firewall (UFW)..."
-if ! command -v ufw &> /dev/null; then
-    echo "[-] UFW belum terinstall. Menginstall sekarang..."
-    sudo pacman -S ufw --noconfirm
+# 1. Cek Firewall
+if sudo ufw status | grep -q "active"; then
+    echo "[✔] Firewall Aktif (+40 pts)"
+    ((score+=40))
+else
+    echo "[✘] Firewall MATI! Bahaya."
 fi
-sudo systemctl enable --now ufw
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
-sudo ufw allow ssh  # Biar kamu nggak terkunci kalau remote
-sudo ufw --force enable
 
-# 3. Audit Log Sistem Dasar
-echo "[!] Melakukan Audit Log Dasar (Cek login gagal)..."
-echo "--- Percobaan Login Gagal Terakhir ---"
-sudo journalctl _SYSTEMD_UNIT=sshd.service | grep "Failed password" | tail -n 5
-lastb | head -n 5
+# 2. Cek SSH Port
+if sudo ufw status | grep -q "22"; then
+    echo "[!] Port SSH Masih Terbuka! (-20 pts)"
+else
+    echo "[✔] Port SSH Tertutup/Stealth Mode (+30 pts)"
+    ((score+=30))
+fi
 
-echo "[+] Hardening Selesai! Sistem sekarang lebih aman."
+# 3. Cek Permission /etc/shadow
+if [[ $(stat -c "%a" /etc/shadow) == "600" ]]; then
+    echo "[✔] File Shadow Terkunci Aman (+30 pts)"
+    ((score+=30))
+else
+    echo "[✘] File Shadow Terlalu Terbuka!"
+fi
+
+echo "---------------------------------------"
+echo "SECURITY SCORE ANDA: $score / 100"
+echo "---------------------------------------"
+
+if [ $score -eq 100 ]; then
+    echo "Status: AMAN (Sesuai Standar Suditro)"
+else
+    echo "Status: PERLU PERBAIKAN"
+fi
