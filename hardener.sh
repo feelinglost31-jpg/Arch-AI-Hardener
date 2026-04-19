@@ -79,3 +79,25 @@ if [ "$fix_needed" = true ] && [ -t 0 ]; then
         echo -e "${GREEN}[✔] Perbaikan selesai!${NC}"
     fi
 fi
+# --- MODULE: AUTO-SYNC TO CLOUD ---
+echo -e "${BLUE}--- [ Cloud Syncing ] ---${NC}"
+cd ~/Arch-AI-Hardener
+
+# Cek apakah ada perubahan (terutama di audit.log)
+if [[ -n $(git status -s) ]]; then
+    echo -e "[${YELLOW}!${NC}] Perubahan terdeteksi, mensinkronkan ke GitHub..."
+    git add .
+    git commit -m "auto-audit: score $score at $(date '+%Y-%m-%d %H:%M:%S')"
+    
+    # Push secara silent (output dibuang ke /dev/null biar gak menuhin log)
+    git push origin main > /dev/null 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "[${GREEN}✔${NC}] Sync Berhasil!"
+    else
+        echo -e "[${RED}✘${NC}] Sync Gagal (Cek koneksi internet)"
+    fi
+else
+    echo -e "[${GREEN}✔${NC}] Cloud sudah sinkron."
+fi
+echo -e "${BLUE}---------------------------------------${NC}"
