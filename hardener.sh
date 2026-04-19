@@ -1,9 +1,7 @@
 #!/bin/bash
-
-# --- Arch-AI-Hardener v1.4: Cloud Integrated ---
+# --- Arch-AI-Hardener v1.5: Intruder Alert ---
 # Author: Suditro Pratama
 
-# Definisi Warna
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -17,84 +15,59 @@ timestamp=$(date "+%Y-%m-%d %H:%M:%S")
 
 echo -e "${BLUE}--- [ Arch-AI-Hardener: Smart Audit ] ---${NC}"
 
-# --- BAGIAN 1: AUDIT FIREWALL & SYSTEM ---
-if sudo ufw status | grep -q "active"; then
-    echo -e "[${GREEN}✔${NC}] Firewall Aktif (+40 pts)"
-    ((score+=40))
+# --- MODUL 1: INTRUDER ALERT (NEW!) ---
+echo -e "${BLUE}--- [ Intruder Discovery ] ---${NC}"
+# Cek percobaan login gagal dalam 24 jam terakhir
+failed_attempts=$(journalctl --since "24h ago" | grep -i "failed password" | wc -l)
+
+if [ "$failed_attempts" -gt 0 ]; then
+    echo -e "[${RED}⚠${NC}] WASPADA: Ada ${RED}$failed_attempts${NC} percobaan login gagal dlm 24 jam!"
+    # Ambil 3 IP terakhir yang mencoba menyerang
+    journalctl --since "24h ago" | grep -i "failed password" | awk '{print $NF}' | tail -n 3 > /tmp/intruders.txt
+    echo -e "[${RED}!${NC}] IP Terakhir: $(cat /tmp/intruders.txt | tr '\n' ' ')"
 else
-    echo -e "[${RED}✘${NC}] Firewall MATI!"
-    fix_needed=true
+    echo -e "[${GREEN}✔${NC}] Tidak ada aktivitas mencurigakan."
+fi
+
+# --- MODUL 2: SYSTEM AUDIT ---
+echo -e "${BLUE}--- [ System Security ] ---${NC}"
+if sudo ufw status | grep -q "active"; then
+    echo -e "[${GREEN}✔${NC}] Firewall Aktif (+40 pts)"; ((score+=40))
+else
+    echo -e "[${RED}✘${NC}] Firewall MATI!"; fix_needed=true
 fi
 
 if sudo ufw status | grep -q "22"; then
-    echo -e "[${YELLOW}!${NC}] Port SSH Masih Terbuka! (-20 pts)"
-    fix_needed=true
+    echo -e "[${YELLOW}!${NC}] Port SSH Terbuka! (-20 pts)"; fix_needed=true
 else
-    echo -e "[${GREEN}✔${NC}] Port SSH Tertutup (+30 pts)"
-    ((score+=30))
+    echo -e "[${GREEN}✔${NC}] Port SSH Tertutup (+30 pts)"; ((score+=30))
 fi
 
 if [[ $(stat -c "%a" /etc/shadow) == "600" ]]; then
-    echo -e "[${GREEN}✔${NC}] File Shadow Terkunci Aman (+30 pts)"
-    ((score+=30))
+    echo -e "[${GREEN}✔${NC}] File Shadow Terkunci (+30 pts)"; ((score+=30))
 else
-    echo -e "[${RED}✘${NC}] File Shadow Terlalu Terbuka!"
-    fix_needed=true
+    echo -e "[${RED}✘${NC}] Shadow File Terbuka!"; fix_needed=true
 fi
 
-# --- BAGIAN 2: NETWORK DISCOVERY ---
+# --- MODUL 3: NETWORK ---
 echo -e "${BLUE}--- [ Network Discovery ] ---${NC}"
 interface=$(nmcli -t -f DEVICE,STATE device | grep ":connected" | cut -d: -f1 | head -n1)
-
 if [ -z "$interface" ]; then
-    echo -e "[${RED}!${NC}] Status: DISCONNECTED"
     ip_addr="127.0.0.1"
 else
-    echo -e "[${GREEN}✔${NC}] Interface: $interface"
     ip_addr=$(ip addr show $interface | grep "inet " | awk '{print $2}' | cut -d/ -f1)
-    echo -e "[${GREEN}✔${NC}] Local IP: ${YELLOW}$ip_addr${NC}"
-    
-    public_ip=$(curl -s --max-time 2 ifconfig.me)
-    if [ -n "$public_ip" ]; then
-        echo -e "[${GREEN}✔${NC}] Public IP: ${YELLOW}$public_ip${NC}"
-    else
-        echo -e "[${YELLOW}!${NC}] Public IP: Offline/Timed Out"
-    fi
-fi
-echo -e "${BLUE}---------------------------------------${NC}"
-
-# --- BAGIAN 3: SCORE & LOGGING ---
-echo -e "SECURITY SCORE ANDA: ${YELLOW}$score / 100${NC}"
-echo "[$timestamp] Audit Score: $score/100 | IP: $ip_addr" >> $log_file
-
-# --- BAGIAN 4: AUTO-FIX (Jika Interaktif) ---
-if [ "$fix_needed" = true ] && [ -t 0 ]; then
-    read -p "Sistem belum optimal. Jalankan Auto-Fix? (y/n): " choice
-    if [[ "$choice" =~ ^[Yy]$ ]]; then
-        sudo ufw --force enable > /dev/null
-        sudo ufw delete allow 22 > /dev/null
-        sudo chmod 600 /etc/shadow
-        echo "[$timestamp] AUTO-FIX EXECUTED" >> $log_file
-        echo -e "${GREEN}[✔] Perbaikan selesai!${NC}"
-    fi
+    echo -e "[${GREEN}✔${NC}] Local IP: $ip_addr"
 fi
 
-# --- BAGIAN 5: AUTO-SYNC TO CLOUD ---
+# --- MODUL 4: LOGGING & SYNC ---
+echo "[$timestamp] Score: $score/100 | Failed Logs: $failed_attempts | IP: $ip_addr" >> $log_file
+
 echo -e "${BLUE}--- [ Cloud Syncing ] ---${NC}"
 cd ~/Arch-AI-Hardener
-
 if [[ -n $(git status -s) ]]; then
-    echo -e "[${YELLOW}!${NC}] Perubahan terdeteksi, mensinkronkan ke GitHub..."
     git add .
-    git commit -m "auto-audit: score $score at $timestamp"
+    git commit -m "security-update: score $score, failed: $failed_attempts at $timestamp"
     git push origin main > /dev/null 2>&1
-    
-    if [ $? -eq 0 ]; then
-        echo -e "[${GREEN}✔${NC}] Sync Berhasil!"
-    else
-        echo -e "[${RED}✘${NC}] Sync Gagal (Cek koneksi internet)"
-    fi
-else
-    echo -e "[${GREEN}✔${NC}] Cloud sudah sinkron."
+    echo -e "[${GREEN}✔${NC}] Cloud Synced!"
 fi
-echo -e "${BLUE}---------------------------------------${NC}"
+echo -e "SCORE AKHIR: ${YELLOW}$score / 100${NC}"
