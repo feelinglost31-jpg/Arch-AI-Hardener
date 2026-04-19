@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# --- Arch-AI-Hardener v1.3: Network Aware ---
+# --- Arch-AI-Hardener v1.4: Cloud Integrated ---
 # Author: Suditro Pratama
 
 # Definisi Warna
@@ -48,6 +48,7 @@ interface=$(nmcli -t -f DEVICE,STATE device | grep ":connected" | cut -d: -f1 | 
 
 if [ -z "$interface" ]; then
     echo -e "[${RED}!${NC}] Status: DISCONNECTED"
+    ip_addr="127.0.0.1"
 else
     echo -e "[${GREEN}✔${NC}] Interface: $interface"
     ip_addr=$(ip addr show $interface | grep "inet " | awk '{print $2}' | cut -d/ -f1)
@@ -64,11 +65,9 @@ echo -e "${BLUE}---------------------------------------${NC}"
 
 # --- BAGIAN 3: SCORE & LOGGING ---
 echo -e "SECURITY SCORE ANDA: ${YELLOW}$score / 100${NC}"
-echo -e "${BLUE}---------------------------------------${NC}"
-
 echo "[$timestamp] Audit Score: $score/100 | IP: $ip_addr" >> $log_file
 
-# Auto-Fix
+# --- BAGIAN 4: AUTO-FIX (Jika Interaktif) ---
 if [ "$fix_needed" = true ] && [ -t 0 ]; then
     read -p "Sistem belum optimal. Jalankan Auto-Fix? (y/n): " choice
     if [[ "$choice" =~ ^[Yy]$ ]]; then
@@ -79,17 +78,15 @@ if [ "$fix_needed" = true ] && [ -t 0 ]; then
         echo -e "${GREEN}[✔] Perbaikan selesai!${NC}"
     fi
 fi
-# --- MODULE: AUTO-SYNC TO CLOUD ---
+
+# --- BAGIAN 5: AUTO-SYNC TO CLOUD ---
 echo -e "${BLUE}--- [ Cloud Syncing ] ---${NC}"
 cd ~/Arch-AI-Hardener
 
-# Cek apakah ada perubahan (terutama di audit.log)
 if [[ -n $(git status -s) ]]; then
     echo -e "[${YELLOW}!${NC}] Perubahan terdeteksi, mensinkronkan ke GitHub..."
     git add .
-    git commit -m "auto-audit: score $score at $(date '+%Y-%m-%d %H:%M:%S')"
-    
-    # Push secara silent (output dibuang ke /dev/null biar gak menuhin log)
+    git commit -m "auto-audit: score $score at $timestamp"
     git push origin main > /dev/null 2>&1
     
     if [ $? -eq 0 ]; then
