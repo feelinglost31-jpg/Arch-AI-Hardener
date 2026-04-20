@@ -71,3 +71,9 @@ if [[ -n $(git status -s) ]]; then
     echo -e "[${GREEN}✔${NC}] Cloud Synced!"
 fi
 echo -e "SCORE AKHIR: ${YELLOW}$score / 100${NC}"
+# --- [ TELEGRAM NOTIFICATION ] ---
+TOKEN="8742506481:AAE7RX5PCHI4gfuF0l-YBofOmyZ7hWkS0QA"
+ID="7760947776"
+MESSAGE="🛡️ AUDIT SELESAI, BANG! %0A📌 Score: $score/100 %0A🌐 IP: $(curl -s ifconfig.me) %0A🕒 Waktu: $(date '+%Y-%m-%d %H:%M:%S')"
+
+curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d "chat_id=$ID" -d "text=$MESSAGE" > /dev/null
