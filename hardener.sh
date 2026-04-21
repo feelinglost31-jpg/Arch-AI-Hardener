@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# --- COLORS ---
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-RED='\033[0;31m'
-CYAN='\033[0;36m'
+# --- WARNA (BIAR GAHAR) ---
+GREEN='\033[1;32m'
+BLUE='\033[1;34m'
+RED='\033[1;31m'
+CYAN='\033[1;36m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
@@ -12,13 +12,15 @@ NC='\033[0m' # No Color
 TARGET_DIR="/home/ditr/Arch-AI-Hardener"
 SCORE=0
 
+clear
 echo -e "${CYAN}--- [ Arch-AI-Hardener: Smart Audit ] ---${NC}"
 
-# 1. Cek Intruder
+# 1. Cek Intruder Discovery
 echo -e "${BLUE}--- [ Intruder Discovery ] ---${NC}"
-# Arch Linux biasanya pakai 'journalctl' karena 'auth.log' sering tidak ada secara default
-if journalctl _COMM=sshd | grep "Failed password" | tail -n 5 | grep -q "failed"; then
-    echo -e "${RED}[!] Ada percobaan login gagal!${NC}"
+# Pakai journalctl karena di Arch Linux lebih akurat
+FAILED_LOGIN=$(journalctl _COMM=sshd | grep "Failed password" | tail -n 1)
+if [[ -n "$FAILED_LOGIN" ]]; then
+    echo -e "${RED}[!] Ada percobaan login gagal detected!${NC}"
 else
     echo -e "${GREEN}[✔] Tidak ada aktivitas mencurigakan.${NC}"
 fi
@@ -51,7 +53,7 @@ else
     echo -e "${RED}[X] File Shadow Terbuka ($SHADOW_PERM) (0 pts)${NC}"
 fi
 
-# 3. Cek Network
+# 3. Cek Network Discovery
 echo -e "${BLUE}--- [ Network Discovery ] ---${NC}"
 IP_LOCAL=$(ip route get 1.1.1.1 | grep -oP 'src \K\S+' || echo "No IP")
 echo -e "${GREEN}[✔] Local IP: $IP_LOCAL${NC}"
@@ -60,9 +62,16 @@ echo -e "${GREEN}[✔] Local IP: $IP_LOCAL${NC}"
 echo -e "${BLUE}--- [ Cloud Syncing ] ---${NC}"
 cd "$TARGET_DIR" || exit
 sudo git config --global --add safe.directory "$TARGET_DIR"
+
+# Simpan log skor
 echo "Audit Log: $(date) - Score: $SCORE" >> audit_log.txt
-sudo git add .
+
+# Sync ke Git (Silent mode biar rapi)
+sudo git add . > /dev/null 2>&1
 sudo git commit -m "security-update: score $SCORE at $(date '+%Y-%m-%d %H:%M:%S')" --allow-empty > /dev/null 2>&1
 echo -e "${GREEN}[✔] Cloud Synced!${NC}"
 
-echo -e "${YELLOW}SCORE AKHIR: $SCORE / 100${NC}"
+# --- HASIL AKHIR ---
+echo -e "${YELLOW}=====================================${NC}"
+echo -e "${YELLOW}       SCORE AKHIR: $SCORE / 100      ${NC}"
+echo -e "${YELLOW}=====================================${NC}"
