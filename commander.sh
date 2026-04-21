@@ -4,7 +4,7 @@ TOKEN="8742506481:AAE7RX5PCHI4gfuF0l-YBofOmyZ7hWkS0QA"
 ID="7760947776"
 OFFSET=-1
 
-echo "COMMANDER AKTIF. Menunggu perintah /status atau /audit..."
+echo "🛡️ Suditro Commander Aktif. Menunggu perintah..."
 
 while true; do
     UPDATES=$(curl -s "https://api.telegram.org/bot$TOKEN/getUpdates?offset=$OFFSET&timeout=10")
@@ -19,23 +19,24 @@ while true; do
             
             # --- PERINTAH /status ---
             if [[ "$MESSAGE" == "/status" ]]; then
-                TEMP=$(sensors | grep -E 'Tctl|Package id 0|temp1' | head -n 1 | awk '{print $2}' | tr -d '+')
+                # AMBIL SUHU Tctl (Ryzen) yang paling akurat
+                TEMP=$(sensors | grep "Tctl" | awk '{print $2}' | tr -d '+')
                 RAM=$(free -h | awk '/^Mem:/ {print $3 "/" $2}')
                 UPTIME=$(uptime -p | sed 's/up //')
                 IP_LOCAL=$(ip route get 1.1.1.1 | grep -oP 'src \K\S+' || echo "No IP")
+                FAN=$(sensors | grep "cpu_fan" | awk '{print $2 " " $3}')
                 
-                RESPONSE="💻 *STATUS LAPTOP*%0A🌡️ Suhu: $TEMP%0A📊 RAM: $RAM%0A⏱️ Uptime: $UPTIME%0A🌐 IP: $IP_LOCAL"
+                RESPONSE="💻 *LAPTOP STATUS* %0A🌡️ CPU: $TEMP%0A📊 RAM: $RAM%0A🌀 Fan: $FAN%0A⏱️ Uptime: $UPTIME%0A🌐 IP: $IP_LOCAL"
                 curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d "chat_id=$ID" -d "text=$RESPONSE" -d "parse_mode=Markdown" > /dev/null
 
-            # --- PERINTAH /audit (SINKRONISASI SKOR) ---
+            # --- PERINTAH /audit ---
             elif [[ "$MESSAGE" == "/audit" ]]; then
-                # Kirim sinyal kalau audit lagi jalan
                 curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d "chat_id=$ID" -d "text=🛡️ _Sabar Bang, Audit lagi jalan..._" -d "parse_mode=Markdown" > /dev/null
                 
-                # Jalankan hardener.sh dan ambil baris SCORE terakhir
-                SKOR_SISTEM=$(bash ~/Arch-AI-Hardener/hardener.sh | grep "SCORE AKHIR" | awk '{print $3}')
+                # JALANKAN DENGAN SUDO (Pastikan langkah visudo di bawah sudah dilakukan)
+                SKOR_SISTEM=$(sudo ~/Arch-AI-Hardener/hardener.sh | grep "SCORE AKHIR" | awk '{print $3}')
                 
-                RESPONSE="⚔️ *AUDIT SECURITY SINKRON* ⚔️%0A📌 Score di ASUS TUF: *$SKOR_SISTEM / 100*%0A✅ Status: Terverifikasi"
+                RESPONSE="⚔️ *AUDIT SINKRON* ⚔️%0A📌 Score: *$SKOR_SISTEM / 100*%0A✅ Status: Verified"
                 curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d "chat_id=$ID" -d "text=$RESPONSE" -d "parse_mode=Markdown" > /dev/null
             fi
         fi

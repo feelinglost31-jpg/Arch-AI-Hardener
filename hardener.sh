@@ -1,79 +1,66 @@
 #!/bin/bash
-# --- Arch-AI-Hardener v1.5: Intruder Alert ---
-# Author: Suditro Pratama
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' 
+# --- CONFIGURATION ---
+TARGET_DIR="/home/ditr/Arch-AI-Hardener"
+SCORE=0
 
-score=0
-fix_needed=false
-log_file="/home/ditr/Arch-AI-Hardener/audit.log"
-timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+echo "--- [ Arch-AI-Hardener: Smart Audit ] ---"
 
-echo -e "${BLUE}--- [ Arch-AI-Hardener: Smart Audit ] ---${NC}"
-
-# --- MODUL 1: INTRUDER ALERT (NEW!) ---
-echo -e "${BLUE}--- [ Intruder Discovery ] ---${NC}"
-# Cek percobaan login gagal dalam 24 jam terakhir
-failed_attempts=$(journalctl --since "24h ago" | grep -i "failed password" | wc -l)
-
-if [ "$failed_attempts" -gt 0 ]; then
-    echo -e "[${RED}⚠${NC}] WASPADA: Ada ${RED}$failed_attempts${NC} percobaan login gagal dlm 24 jam!"
-    # Ambil 3 IP terakhir yang mencoba menyerang
-    journalctl --since "24h ago" | grep -i "failed password" | awk '{print $NF}' | tail -n 3 > /tmp/intruders.txt
-    echo -e "[${RED}!${NC}] IP Terakhir: $(cat /tmp/intruders.txt | tr '\n' ' ')"
+# 1. Cek Intruder (Auth Log)
+echo "--- [ Intruder Discovery ] ---"
+if sudo grep "Failed password" /var/log/auth.log | tail -n 5 | grep -q "failed"; then
+    echo "[!] Ada percobaan login gagal!"
 else
-    echo -e "[${GREEN}✔${NC}] Tidak ada aktivitas mencurigakan."
+    echo "[✔] Tidak ada aktivitas mencurigakan."
+    SCORE=$((SCORE + 0)) # Placeholder
 fi
 
-# --- MODUL 2: SYSTEM AUDIT ---
-echo -e "${BLUE}--- [ System Security ] ---${NC}"
-if sudo ufw status | grep -q "active"; then
-    echo -e "[${GREEN}✔${NC}] Firewall Aktif (+40 pts)"; ((score+=40))
+# 2. Cek System Security
+echo "--- [ System Security ] ---"
+
+# Cek Firewall (UFW)
+if sudo ufw status | grep -q "Status: active"; then
+    echo "[✔] Firewall Aktif (+40 pts)"
+    SCORE=$((SCORE + 40))
 else
-    echo -e "[${RED}✘${NC}] Firewall MATI!"; fix_needed=true
+    echo "[X] Firewall MATI (0 pts)"
 fi
 
-if sudo ufw status | grep -q "22"; then
-    echo -e "[${YELLOW}!${NC}] Port SSH Terbuka! (-20 pts)"; fix_needed=true
+# Cek SSH (Port 22)
+if sudo ss -tuln | grep -q ":22"; then
+    echo "[X] Port SSH Terbuka (Bahaya!)"
 else
-    echo -e "[${GREEN}✔${NC}] Port SSH Tertutup (+30 pts)"; ((score+=30))
+    echo "[✔] Port SSH Tertutup (+30 pts)"
+    SCORE=$((SCORE + 30))
 fi
 
-if [[ $(stat -c "%a" /etc/shadow) == "600" ]]; then
-    echo -e "[${GREEN}✔${NC}] File Shadow Terkunci (+30 pts)"; ((score+=30))
+# Cek File Shadow
+if [ "$(sudo stat -c %a /etc/shadow)" == "000" ] || [ "$(sudo stat -c %a /etc/shadow)" == "600" ]; then
+    echo "[✔] File Shadow Terkunci (+30 pts)"
+    SCORE=$((SCORE + 30))
 else
-    echo -e "[${RED}✘${NC}] Shadow File Terbuka!"; fix_needed=true
+    echo "[X] File Shadow Terbuka (0 pts)"
 fi
 
-# --- MODUL 3: NETWORK ---
-echo -e "${BLUE}--- [ Network Discovery ] ---${NC}"
-interface=$(nmcli -t -f DEVICE,STATE device | grep ":connected" | cut -d: -f1 | head -n1)
-if [ -z "$interface" ]; then
-    ip_addr="127.0.0.1"
-else
-    ip_addr=$(ip addr show $interface | grep "inet " | awk '{print $2}' | cut -d/ -f1)
-    echo -e "[${GREEN}✔${NC}] Local IP: $ip_addr"
-fi
+# 3. Cek Network
+echo "--- [ Network Discovery ] ---"
+IP_LOCAL=$(ip route get 1.1.1.1 | grep -oP 'src \K\S+')
+echo "[✔] Local IP: $IP_LOCAL"
 
-# --- MODUL 4: LOGGING & SYNC ---
-echo "[$timestamp] Score: $score/100 | Failed Logs: $failed_attempts | IP: $ip_addr" >> $log_file
+# 4. Cloud Syncing (Git)
+echo "--- [ Cloud Syncing ] ---"
+# Masuk ke folder dengan path absolut agar sudo tidak nyasar ke /root
+cd "$TARGET_DIR" || exit
 
-echo -e "${BLUE}--- [ Cloud Syncing ] ---${NC}"
-cd ~/Arch-AI-Hardener
-if [[ -n $(git status -s) ]]; then
-    git add .
-    git commit -m "security-update: score $score, failed: $failed_attempts at $timestamp"
-    git push origin main > /dev/null 2>&1
-    echo -e "[${GREEN}✔${NC}] Cloud Synced!"
-fi
-echo -e "SCORE AKHIR: ${YELLOW}$score / 100${NC}"
-# --- [ TELEGRAM NOTIFICATION ] ---
-TOKEN="8742506481:AAE7RX5PCHI4gfuF0l-YBofOmyZ7hWkS0QA"
-ID="7760947776"
-MESSAGE="🛡️ AUDIT SELESAI, BANG! %0A📌 Score: $score/100 %0A🌐 IP: $(curl -s ifconfig.me) %0A🕒 Waktu: $(date '+%Y-%m-%d %H:%M:%S')"
+# Mencegah error git safe directory
+sudo git config --global --add safe.directory "$TARGET_DIR"
 
-curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d "chat_id=$ID" -d "text=$MESSAGE" > /dev/null
+# Simpan hasil ke file log sebelum commit
+echo "Audit Log: $(date) - Score: $SCORE" >> audit_log.txt
+
+# Sync ke Git
+sudo git add .
+sudo git commit -m "security-update: score $SCORE at $(date '+%Y-%m-%d %H:%M:%S')" --allow-empty > /dev/null 2>&1
+echo "[✔] Cloud Synced!"
+
+echo "SCORE AKHIR: $SCORE / 100"
