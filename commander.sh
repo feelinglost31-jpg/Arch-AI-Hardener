@@ -4,7 +4,10 @@ TOKEN="8742506481:AAE7RX5PCHI4gfuF0l-YBofOmyZ7hWkS0QA"
 ID="7760947776"
 OFFSET=-1
 
-echo "🛡️ Suditro Commander Aktif. Menunggu perintah..."
+# Pastikan bot pakai standar UTF-8 supaya tidak error locale
+export LC_ALL=C.UTF-8
+
+echo "🛡️ Suditro Commander VISION V2 Aktif. Menunggu perintah..."
 
 while true; do
     UPDATES=$(curl -s "https://api.telegram.org/bot$TOKEN/getUpdates?offset=$OFFSET&timeout=10")
@@ -19,25 +22,37 @@ while true; do
             
             # --- PERINTAH /status ---
             if [[ "$MESSAGE" == "/status" ]]; then
-                # AMBIL SUHU Tctl (Ryzen) yang paling akurat
                 TEMP=$(sensors | grep "Tctl" | awk '{print $2}' | tr -d '+')
                 RAM=$(free -h | awk '/^Mem:/ {print $3 "/" $2}')
-                UPTIME=$(uptime -p | sed 's/up //')
-                IP_LOCAL=$(ip route get 1.1.1.1 | grep -oP 'src \K\S+' || echo "No IP")
-                FAN=$(sensors | grep "cpu_fan" | awk '{print $2 " " $3}')
-                
-                RESPONSE="💻 *LAPTOP STATUS* %0A🌡️ CPU: $TEMP%0A📊 RAM: $RAM%0A🌀 Fan: $FAN%0A⏱️ Uptime: $UPTIME%0A🌐 IP: $IP_LOCAL"
+                RESPONSE="💻 *LAPTOP STATUS*%0A🌡️ CPU: $TEMP%0A📊 RAM: $RAM"
                 curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d "chat_id=$ID" -d "text=$RESPONSE" -d "parse_mode=Markdown" > /dev/null
 
             # --- PERINTAH /audit ---
             elif [[ "$MESSAGE" == "/audit" ]]; then
                 curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d "chat_id=$ID" -d "text=🛡️ _Sabar Bang, Audit lagi jalan..._" -d "parse_mode=Markdown" > /dev/null
-                
-                # JALANKAN DENGAN SUDO (Pastikan langkah visudo di bawah sudah dilakukan)
                 SKOR_SISTEM=$(sudo ~/Arch-AI-Hardener/hardener.sh | grep "SCORE AKHIR" | awk '{print $3}')
-                
-                RESPONSE="⚔️ *AUDIT SINKRON* ⚔️%0A📌 Score: *$SKOR_SISTEM / 100*%0A✅ Status: Verified"
+                RESPONSE="⚔️ *AUDIT SINKRON* ⚔️%0A📌 Score: *$SKOR_SISTEM / 100*"
                 curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d "chat_id=$ID" -d "text=$RESPONSE" -d "parse_mode=Markdown" > /dev/null
+
+            # --- PERINTAH /intip (VERSI FIXED KDE) ---
+            elif [[ "$MESSAGE" == "/intip" ]]; then
+                IMG_PATH="/tmp/ss_suditro.png"
+                
+                # Ambil screenshot secara silent
+                spectacle -b -n -o "$IMG_PATH" > /dev/null 2>&1
+                
+                # Tunggu sebentar biar file selesai ditulis
+                sleep 1.5
+                
+                if [ -f "$IMG_PATH" ]; then
+                    curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendPhoto" \
+                         -F "chat_id=$ID" \
+                         -F "photo=@$IMG_PATH" \
+                         -F "caption=📸 Kondisi layar ASUS TUF Abang" > /dev/null
+                    rm "$IMG_PATH"
+                else
+                    curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d "chat_id=$ID" -d "text=❌ Gagal ambil gambar, Bang!" > /dev/null
+                fi
             fi
         fi
     fi
