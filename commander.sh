@@ -5,7 +5,7 @@ ID="7760947776"
 OFFSET=-1
 export LC_ALL=C.UTF-8
 
-echo "🛡️ Suditro Commander V3.2 (Aesthetic Edition) Aktif..."
+echo "🛡️ Suditro Commander: THE COMPLETE EDITION Aktif..."
 
 while true; do
     UPDATES=$(curl -s "https://api.telegram.org/bot$TOKEN/getUpdates?offset=$OFFSET&timeout=10")
@@ -18,20 +18,33 @@ while true; do
 
         if [[ "$CHAT_ID" == "$ID" ]]; then
             
-            # --- 📊 FITUR /top (RESOURCE MONITOR) ---
-            if [[ "$MESSAGE" == "/top" ]]; then
-                TOP_PROC=$(top -b -n 1 | head -n 12 | tail -n 5 | awk '{printf "🔥 *%s%%* -> _%s_\n", $9, $12}')
-                RESPONSE="📊 *RESOURCE MONITOR*%0A━━━━━━━━━━━━━━━%0A$TOP_PROC%0A━━━━━━━━━━━━━━━%0A⚡ _ASUS TUF Performance_"
+            # --- 🌡️ FITUR /status (KEMBALI HADIR) ---
+            if [[ "$MESSAGE" == "/status" ]]; then
+                TEMP=$(sensors | grep "Tctl" | awk '{print $2}' | tr -d '+')
+                RAM=$(free -h | awk '/^Mem:/ {print $3 "/" $2}')
+                RESPONSE="💻 *LAPTOP STATUS*%0A━━━━━━━━━━━━━━━%0A🌡️ *CPU:* $TEMP%0A📊 *RAM:* $RAM%0A━━━━━━━━━━━━━━━"
                 curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d "chat_id=$ID" -d "text=$RESPONSE" -d "parse_mode=Markdown" > /dev/null
 
-            # --- 🌐 FITUR /netstat (NETWORK SCANNER) ---
+            # --- 📊 FITUR /top ---
+            elif [[ "$MESSAGE" == "/top" ]]; then
+                TOP_PROC=$(top -b -n 1 | head -n 12 | tail -n 5 | awk '{printf "🔥 *%s%%* -> _%s_\n", $9, $12}')
+                RESPONSE="📊 *RESOURCE MONITOR*%0A━━━━━━━━━━━━━━━%0A$TOP_PROC%0A━━━━━━━━━━━━━━━"
+                curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d "chat_id=$ID" -d "text=$RESPONSE" -d "parse_mode=Markdown" > /dev/null
+
+            # --- 🌐 FITUR /netstat ---
             elif [[ "$MESSAGE" == "/netstat" ]]; then
                 CONNECTIONS=$(ss -tun | grep ESTAB | awk '{print $5}' | cut -d: -f1 | sort | uniq -c | awk '{printf "🌐 *%s* (%s Hits)\n", $2, $1}')
-                if [[ -z "$CONNECTIONS" ]]; then
-                    RESPONSE="🌐 *NETWORK SHIELD*%0A━━━━━━━━━━━━━━━%0A✅ *Status:* _Secure / No Outside Link_%0A━━━━━━━━━━━━━━━"
-                else
-                    RESPONSE="🌐 *INTRUSION DETECTOR*%0A━━━━━━━━━━━━━━━%0A$CONNECTIONS%0A━━━━━━━━━━━━━━━%0A⚠️ _Monitoring Active..._"
-                fi
+                [[ -z "$CONNECTIONS" ]] && CONNECTIONS="✅ *Status:* _Secure_"
+                RESPONSE="🌐 *NETWORK MONITOR*%0A━━━━━━━━━━━━━━━%0A$CONNECTIONS%0A━━━━━━━━━━━━━━━"
+                curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d "chat_id=$ID" -d "text=$RESPONSE" -d "parse_mode=Markdown" > /dev/null
+
+            # --- 🛡️ FITUR /audit (FIX VALIDASI) ---
+            elif [[ "$MESSAGE" == "/audit" ]]; then
+                curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d "chat_id=$ID" -d "text=🛡️ _Sabar Bang, Audit lagi jalan..._" -d "parse_mode=Markdown" > /dev/null
+                # Kita ambil angka doang biar gak error gara-gara warna terminal
+                SKOR_RAW=$(sudo ~/Arch-AI-Hardener/hardener.sh | grep "SCORE AKHIR" | sed 's/\x1b\[[0-9;]*m//g')
+                SKOR_SISTEM=$(echo "$SKOR_RAW" | awk '{print $3}')
+                RESPONSE="⚔️ *AUDIT RESULT*%0A━━━━━━━━━━━━━━━%0A📌 Score: *$SKOR_SISTEM / 100*%0A━━━━━━━━━━━━━━━"
                 curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d "chat_id=$ID" -d "text=$RESPONSE" -d "parse_mode=Markdown" > /dev/null
 
             # --- 📸 FITUR /intip ---
@@ -39,16 +52,7 @@ while true; do
                 IMG_PATH="/tmp/ss_suditro.png"
                 spectacle -b -n -o "$IMG_PATH" > /dev/null 2>&1
                 sleep 1.5
-                if [ -f "$IMG_PATH" ]; then
-                    curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendPhoto" -F "chat_id=$ID" -F "photo=@$IMG_PATH" -F "caption=📸 Layar saat ini." > /dev/null
-                    rm "$IMG_PATH"
-                fi
-
-            # --- 🛡️ FITUR /audit ---
-            elif [[ "$MESSAGE" == "/audit" ]]; then
-                SKOR_SISTEM=$(sudo ~/Arch-AI-Hardener/hardener.sh | grep "SCORE AKHIR" | awk '{print $3}')
-                RESPONSE="⚔️ *AUDIT SINKRON*%0A📌 Score: *$SKOR_SISTEM / 100*"
-                curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d "chat_id=$ID" -d "text=$RESPONSE" -d "parse_mode=Markdown" > /dev/null
+                [[ -f "$IMG_PATH" ]] && curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendPhoto" -F "chat_id=$ID" -F "photo=@$IMG_PATH" -F "caption=📸 Layar ASUS TUF" > /dev/null && rm "$IMG_PATH"
             fi
         fi
     fi
