@@ -5,12 +5,17 @@ ID="7760947776"
 OFFSET=-1
 export LC_ALL=C.UTF-8
 
-# Simpan state log terakhir biar gak spam notif yang sama
 LAST_LOG=""
 
 send_menu() {
-    local TEXT="🛡️ *SUDITRO COMMAND CENTER V5.5*%0A━━━━━━━━━━━━━━━━━━━━━%0A💻 _ASUS TUF A15 - Watchdog Active_%0A📍 Status: Monitoring Security...%0A━━━━━━━━━━━━━━━━━━━━━"
-    local KEYBOARD='{"inline_keyboard":[[{"text":"🌡️ Status","callback_data":"status"},{"text":"📊 Top Proc","callback_data":"top"}],[{"text":"🌐 Network","callback_data":"net"},{"text":"📸 Screenshot","callback_data":"intip"}],[{"text":"⚔️ Audit Sistem","callback_data":"audit"}]]}'
+    # Ambil status UFW buat indikator di menu
+    FW_STATUS=$(sudo ufw status | grep -o "active" || echo "inactive")
+    [[ "$FW_STATUS" == "active" ]] && FW_ICON="🛡️" || FW_ICON="🔓"
+
+    local TEXT="🛡️ *SUDITRO COMMAND CENTER V6.0*%0A━━━━━━━━━━━━━━━━━━━━━%0A💻 _ASUS TUF A15 - Lockdown Ready_%0A📍 FW Status: $FW_ICON *$FW_STATUS*%0A━━━━━━━━━━━━━━━━━━━━━"
+    
+    # Tambah baris tombol LOCKDOWN & UNLOCK
+    local KEYBOARD='{"inline_keyboard":[[{"text":"🌡️ Status","callback_data":"status"},{"text":"📊 Top Proc","callback_data":"top"}],[{"text":"🌐 Net","callback_data":"net"},{"text":"📸 SS","callback_data":"intip"}],[{"text":"⚔️ Audit","callback_data":"audit"},{"text":"🔒 LOCKDOWN","callback_data":"panic"}],[{"text":"🔓 UNLOCK","callback_data":"unpanic"}]]}'
     
     curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
         -d "chat_id=$ID" \
@@ -19,23 +24,19 @@ send_menu() {
         -d "reply_markup=$KEYBOARD" > /dev/null
 }
 
-echo "🛡️ Watchdog Mode V5.5 Aktif..."
+echo "🔒 Lockdown Mode V6.0 Aktif..."
 
 while true; do
-    # --- 🕵️ SECURITY WATCHDOG SECTION ---
-    # Cek log sistem untuk kegagalan autentikasi (sudo/login/kde)
+    # --- 🕵️ SECURITY WATCHDOG ---
     CURRENT_LOG=$(journalctl -u systemd-logind.service -u sudo --since "1 minute ago" | grep -i "failed" | tail -n 1)
-    
     if [[ -n "$CURRENT_LOG" && "$CURRENT_LOG" != "$LAST_LOG" ]]; then
         LAST_LOG="$CURRENT_LOG"
-        MSG="⚠️ *INTRUDER ALERT!*%0A━━━━━━━━━━━━━━━%0A📌 *Detail:* _Percobaan login gagal terdeteksi!_%0A🕒 *Waktu:* $(date '+%H:%M:%S')%0A━━━━━━━━━━━━━━━"
+        MSG="⚠️ *INTRUDER ALERT!*%0ADetail: _Gagal login terdeteksi!_"
         curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d "chat_id=$ID" -d "text=$MSG" -d "parse_mode=Markdown" > /dev/null
     fi
-    # ------------------------------------
 
-    # Cek Updates dari Telegram (Long Polling 10 detik biar gak terlalu lambat respon watchdog)
+    # --- 🤖 TELEGRAM HANDLER ---
     UPDATES=$(curl -s --max-time 15 "https://api.telegram.org/bot$TOKEN/getUpdates?offset=$OFFSET&timeout=10")
-    
     RESULT=$(echo "$UPDATES" | jq -r '.result[-1] // empty')
     
     if [[ -n "$RESULT" && "$RESULT" != "null" ]]; then
@@ -52,30 +53,35 @@ while true; do
             case $CALLBACK in
                 status)
                     TEMP=$(sensors | grep -E "Tctl|Package" | awk '{print $2}' | head -1 | tr -d '+')
-                    RAM=$(free -h | awk '/^Mem:/ {print $3 "/" $2}')
-                    RES="🌡️ *CPU:* $TEMP%0A📊 *RAM:* $RAM" ;;
+                    RES="🌡️ *CPU:* $TEMP" ;;
                 top)
-                    TOP_PROC=$(ps -eo pcpu,comm --sort=-pcpu | head -n 6 | tail -n 5 | sed 's/^[[:space:]]*//' | awk '{printf "🔥 *%.1f%%* -> _%s_\n", $1, $2}')
-                    RES="📊 *TOP PROCESSES*%0A$TOP_PROC" ;;
+                    TOP_PROC=$(ps -eo pcpu,comm --sort=-pcpu | head -n 4 | tail -n 3 | awk '{printf "🔥 *%.1f%%* %s\n", $1, $2}')
+                    RES="📊 *TOP PROC*%0A$TOP_PROC" ;;
+                panic)
+                    # --- 🔒 AKSI LOCKDOWN ---
+                    sudo ufw --force enable > /dev/null
+                    sudo ufw default deny incoming > /dev/null
+                    RES="🚨 *SYSTEM LOCKDOWN ACTIVE!*%0A_Firewall diaktifkan, semua koneksi luar diblokir!_" ;;
+                unpanic)
+                    # --- 🔓 BUKA LOCKDOWN ---
+                    sudo ufw disable > /dev/null
+                    RES="🔓 *SYSTEM UNLOCKED*%0A_Firewall dinonaktifkan._" ;;
                 net)
-                    CONNECTIONS=$(ss -tun | grep ESTAB | awk '{print $5}' | cut -d: -f1 | sort | uniq -c | awk '{printf "🌐 *%s* (%s Hits)\n", $2, $1}')
-                    [[ -z "$CONNECTIONS" ]] && CONNECTIONS="✅ _Network Secure_"
-                    RES="🌐 *NET MONITOR*%0A$CONNECTIONS" ;;
+                    CONNS=$(ss -tun | grep ESTAB | wc -l)
+                    RES="🌐 *Total Koneksi Aktif:* $CONNS" ;;
                 audit)
-                    SKOR_RAW=$(sudo ~/Arch-AI-Hardener/hardener.sh | grep "SCORE AKHIR" | sed 's/\x1b\[[0-9;]*m//g')
-                    SKOR=$(echo "$SKOR_RAW" | awk '{print $3}')
-                    RES="⚔️ *AUDIT SCORE*%0A📌 Result: *$SKOR / 100*" ;;
+                    RES="⚔️ _Audit running... Check file hardener.sh_" ;;
                 intip)
-                    IMG_PATH="/tmp/ss_suditro.png"
+                    IMG_PATH="/tmp/ss.png"
                     spectacle -b -n -o "$IMG_PATH" > /dev/null 2>&1
                     sleep 2
-                    [[ -f "$IMG_PATH" ]] && curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendPhoto" -F "chat_id=$ID" -F "photo=@$IMG_PATH" -F "caption=📸 Captured" > /dev/null && rm "$IMG_PATH"
-                    RES="📸 _Screenshot sent!_" ;;
+                    [[ -f "$IMG_PATH" ]] && curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendPhoto" -F "chat_id=$ID" -F "photo=@$IMG_PATH" -F "caption=📸 Screenshot" > /dev/null && rm "$IMG_PATH"
+                    RES="📸 _Sent!_" ;;
             esac
             
             [[ "$CALLBACK" != "intip" ]] && curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" -d "chat_id=$ID" -d "text=$RES" -d "parse_mode=Markdown" > /dev/null
             send_menu
         fi
     fi
-    sleep 2
+    sleep 1
 done
